@@ -1,0 +1,7 @@
+*.o
+*.asm
+.DS_Store
+*.img
+*.bin
+*.out
+.vscode/
