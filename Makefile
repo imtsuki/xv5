@@ -1,5 +1,5 @@
 GCCPREFIX='i386-elf-'
-V = @
+V = 
 
 QEMU = qemu-system-i386
 
@@ -30,21 +30,55 @@ LDFLAGS := -m elf_i386
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
-BOOT_OBJS := boot.o
+OBJDIR := obj
 
-%.o: %.S
+BOOT_OBJS := boot.o main.o
+
+all: kernel.img
+
+boot.o: boot.S
 	@echo + as $<
 	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
 
+main.o: main.c
+	@echo + cc -Os $<
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -Os -c -o main.o main.c
+
 boot: $(BOOT_OBJS)
-	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o $@.out $^
+	@echo + ld $<
+	$(V)$(LD) $(LDFLAGS) -N -e entry -Ttext 0x7C00 -o $@.out $^
 	$(V)$(OBJDUMP) -S $@.out >$@.asm
 	$(V)$(OBJCOPY) -S -O binary -j .text $@.out $@
 	$(V)perl sign.pl boot
-	mv boot boot.img
 
-QEMUOPTS = -drive file=boot.img,index=0,media=disk,format=raw -serial mon:stdio
-IMAGES = boot.img
+
+KERN_LDFLAGS := $(LDFLAGS) -T kernel.ld -nostdlib
+KERN_SRCFILES := entry.c
+KERN_OBJFILES := entry.o hankaku.o
+
+%.o: %.c
+	@echo + cc $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
+
+kernel: $(KERN_OBJFILES) kernel.ld
+	@echo + ld $@
+	$(V)$(LD) -o $@ $(KERN_LDFLAGS) $(KERN_OBJFILES) $(GCC_LIB)
+
+kernel.img: boot kernel
+	@echo + mk $@
+	$(V)dd if=/dev/zero of=kernel.img~ count=10000 2>/dev/null
+	$(V)dd if=boot of=kernel.img~ conv=notrunc 2>/dev/null
+	$(V)dd if=kernel of=kernel.img~ seek=1 conv=notrunc 2>/dev/null
+	$(V)mv kernel.img~ kernel.img
+
+QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio
+IMAGES = kernel.img
 
 qemu:
 	$(QEMU) $(QEMUOPTS)
+
+clean:
+	rm *.img
+	rm *.out
+	rm *.asm
