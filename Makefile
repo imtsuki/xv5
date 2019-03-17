@@ -30,6 +30,8 @@ LDFLAGS := -m elf_i386
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
+GCC_LIB := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
+
 OBJDIR := obj
 
 BOOT_OBJS := boot.o main.o
@@ -54,7 +56,11 @@ boot: $(BOOT_OBJS)
 
 KERN_LDFLAGS := $(LDFLAGS) -T kernel.ld -nostdlib
 KERN_SRCFILES := entry.c
-KERN_OBJFILES := entry.o hankaku.o
+KERN_OBJFILES := kbd.o vectors.o trapasm.o printfmt.o trap.o video.o string.o entry.o hankaku.o
+
+%.o: %.S
+	@echo + as $<
+	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
 
 %.o: %.c
 	@echo + cc $<

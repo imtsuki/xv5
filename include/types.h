@@ -1,5 +1,5 @@
-#ifndef TYPE_H
-#define TYPE_H
+#ifndef TYPES_H
+#define TYPES_H
 
 typedef __signed char int8_t;
 typedef unsigned char uint8_t;
@@ -10,4 +10,11 @@ typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
 
-#endif // TYPE_H
+typedef uint32_t size_t;
+typedef int32_t ssize_t;
+
+typedef int32_t intptr_t;
+typedef uint32_t uintptr_t;
+typedef uint32_t physaddr_t;
+
+#endif // TYPES_H

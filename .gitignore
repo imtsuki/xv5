@@ -5,3 +5,5 @@
 *.bin
 *.out
 .vscode/
+kernel
+boot

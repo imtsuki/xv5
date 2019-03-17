@@ -1,7 +1,8 @@
-#include "./mmu.h"
+#include "include/mmu.h"
 .globl entry
 .set PROTECTED_MODE_CS, 0x8
 .set PROTECTED_MODE_DS, 0x10
+.set VESA_MODE, 0x11B
 entry:
 	.code16
 	# Disable interrupts
@@ -12,8 +13,17 @@ entry:
 	mov		%ax, %ds
 	mov		%ax, %es
 video:
-	mov $0x13, %al
-	mov $0x00, %ah
+	# mov $0x13, %al
+	# mov $0x00, %ah
+	mov $0x9000, %ax
+	mov %ax, %es
+	mov $0x0, %di
+	mov $0x115, %cx
+	mov $0x4f01, %ax
+	int $0x10
+	# mov es:di, %eax
+	mov	$0x4115, %bx
+	mov $0x4f02, %ax
 	int $0x10
 	# Enable A20
 seta20.1:

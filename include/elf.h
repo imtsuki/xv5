@@ -1,7 +1,7 @@
 #ifndef ELF_H
 #define ELF_H
 
-#include "type.h"
+#include "types.h"
 
 #define ELF_MAGIC 0x464C457FU	/* "\x7FELF" in little endian */
 
