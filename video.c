@@ -1,5 +1,6 @@
 #include "include/types.h"
 #include "include/vesa.h"
+#include "defs.h"
 
 uint32_t SCREEN_HEIGHT = 1024;
 uint32_t SCREEN_WIDTH = 1280;
@@ -8,15 +9,14 @@ uint8_t *VRAM = (uint8_t *)0xa0000;
 extern uint8_t _binary_hankaku_bin_start;
 extern uint8_t _binary_hankaku_bin_end;
 
-
-void write_pixel(uint32_t x, uint32_t y, uint8_t b, uint8_t g, uint8_t r) {
-    uint8_t *dst = VRAM + 3 *(SCREEN_WIDTH * y + x);
-    *dst = b;
-    *(dst + 1) = g;
-    *(dst + 2) = r;
+void write_pixel(uint32_t x, uint32_t y, struct color c) {
+    struct color *dst = (struct color *)(VRAM + 3 *(SCREEN_WIDTH * y + x));
+    *dst = c;
 }
 
-void vga_putchar(uint32_t x, uint32_t y, uint32_t c, uint8_t *font) {
+void vga_draw_ascii(uint32_t x, uint32_t y, uint32_t c, char ch) {
+    uint8_t *hankaku = &_binary_hankaku_bin_start;
+    uint8_t *font = hankaku + ch * 16;
     for (int i = 0; i < 16; i++) {
         uint8_t *p = VRAM + 3 * ((y + i) * SCREEN_WIDTH + x);
         char d = font[i];
@@ -34,8 +34,16 @@ void vga_putchar(uint32_t x, uint32_t y, uint32_t c, uint8_t *font) {
 void vga_puts(int x, int y, char c, char *s) {
     uint8_t *hankaku = &_binary_hankaku_bin_start;
     for (; *s != '\0'; s++) {
-        vga_putchar(x, y, c, hankaku + *s * 16);
+        vga_draw_ascii(x, y, c, *s);
         x += 8;
+    }
+}
+
+void vga_boxfill(int x, int y, int width, int height, struct color c) {
+    for (int i = 0; i < width; i++) {
+        for (int j = 0; j < height; j++) {
+            write_pixel(x + i, y + j, c);
+        }
     }
 }
 
@@ -43,9 +51,13 @@ void video_init(void) {
     SCREEN_HEIGHT = modeInfo->wYResolution;
     SCREEN_WIDTH = modeInfo->wXResolution;
     VRAM = (uint8_t *)(modeInfo->dwPhysicalBasePointer);
+    SCREEN_HEIGHT = 600;
+    SCREEN_WIDTH = 800;
+    VRAM = (uint8_t *)0xfd000000;
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
         for (int x = 0; x < SCREEN_WIDTH; x++) {
-            write_pixel(x, y, 0xFF, 0xFF, 0xFF);
+            write_pixel(x, y, bgr(255, 255, 255));
         }
     }
+    vga_console_printf("Video buffer base: %x\n", modeInfo->dwPhysicalBasePointer);
 }

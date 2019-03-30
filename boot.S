@@ -8,23 +8,37 @@ entry:
 	# Disable interrupts
 	cli
 	# Initialize registers
-	mov		$0, %ax
-	mov		%ax, %ss
-	mov		%ax, %ds
-	mov		%ax, %es
-video:
-	# mov $0x13, %al
-	# mov $0x00, %ah
-	mov $0x9000, %ax
+	mov $0, %ax
+	mov %ax, %ss
+	mov %ax, %ds
 	mov %ax, %es
-	mov $0x0, %di
+video:
+	mov $0x9000, %di
 	mov $0x115, %cx
 	mov $0x4f01, %ax
 	int $0x10
-	# mov es:di, %eax
 	mov	$0x4115, %bx
 	mov $0x4f02, %ax
 	int $0x10
+get_memory_layout:
+	mov $0x0, %ax
+	mov %ax, %es
+	movl $0, 0x8000
+	xor %bx, %bx
+	mov $0x8004, %di
+start_get_memory_layout:
+	mov $0xe820, %ax
+	mov $20, %cx
+	movl $0x534D4150, %edx
+	int $0x15
+	jnc cont_get_memory_layout
+	jmp finish_get_memory_layout
+cont_get_memory_layout:
+	add $20, %di
+	incl 0x8000
+	cmp $0, %bx
+	jnz start_get_memory_layout
+finish_get_memory_layout:
 	# Enable A20
 seta20.1:
 	inb		$0x64, %al               # Wait for not busy

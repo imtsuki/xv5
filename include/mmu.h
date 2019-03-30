@@ -25,6 +25,8 @@
 
 #ifndef __ASSEMBLER__
 
+#include "types.h"
+
 struct gatedesc {
 	unsigned off_15_0 : 16;   // low 16 bits of offset in segment
 	unsigned cs : 16;        // segment selector
@@ -77,6 +79,19 @@ struct gatedesc {
 	(gate).p = 1;					\
 	(gate).off_31_16 = (uint32_t) (off) >> 16;		\
 }
+
+#define E820_MAX 128
+struct e820_table {
+    uint32_t nr_entries;
+    struct {
+        uint32_t base_addr_low;
+        uint32_t base_addr_high;
+        uint32_t length_low;
+        uint32_t lenght_high;
+        uint32_t type;
+    } __attribute__((packed))
+    entries[E820_MAX];
+};
 
 #endif // __ASSEMBLER__
 #endif // MMU_H

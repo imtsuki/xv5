@@ -72,6 +72,6 @@ typedef struct kVBEInfoBlockStruct
     uint8_t vbReserved[ 189 ];             // 나머지 영역
 } VBEMODEINFOBLOCK;
 
-#define modeInfo ((VBEMODEINFOBLOCK *)0x90000)
+#define modeInfo ((VBEMODEINFOBLOCK *)0x9000)
 
 #endif
