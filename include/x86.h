@@ -45,4 +45,24 @@ lidt(struct gatedesc *p, int size)
   asm volatile("lidt (%0)" : : "r" (pd));
 }
 
+struct segdesc;
+
+static inline void
+lgdt(struct segdesc *p, int size)
+{
+  volatile uint16_t pd[3];
+
+  pd[0] = size-1;
+  pd[1] = (uint32_t)p;
+  pd[2] = (uint32_t)p >> 16;
+
+  asm volatile("lgdt (%0)" : : "r" (pd));
+}
+
+static inline void
+lcr3(uint32_t val)
+{
+  asm volatile("movl %0,%%cr3" : : "r" (val));
+}
+
 #endif // X86_H

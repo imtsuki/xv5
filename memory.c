@@ -1,13 +1,167 @@
 #include "defs.h"
 #include "include/mmu.h"
+#include "include/types.h"
+#include "include/string.h"
+#include "include/x86.h"
+
+pde_t *kpgdir;
+
+struct page_t {
+    struct page_t *next;
+};
+
+struct {
+  struct page_t *freelist;
+} kmem;
+
+uint8_t *mem_start, *mem_end;
+size_t mem_length;
+extern uint8_t data[], end[];
+
+struct segdesc gdt[NSEGS];
+
+void
+seginit(void)
+{
+    gdt[SEG_KCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, 0);
+    gdt[SEG_KDATA] = SEG(STA_W, 0, 0xffffffff, 0);
+    gdt[SEG_UCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, DPL_USER);
+    gdt[SEG_UDATA] = SEG(STA_W, 0, 0xffffffff, DPL_USER);
+    lgdt(gdt, sizeof(gdt));
+}
+
+void kfree(uint8_t *v) {
+    struct page_t *p;
+
+    if((uint32_t)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
+        panic("kfree");
+
+    memset(v, 1, PGSIZE);
+
+    p = (struct page_t *)v;
+    p->next = kmem.freelist;
+    kmem.freelist = p;
+}
+
+void free_range(void *vstart, void *vend) {
+    uint8_t *p;
+    p = (uint8_t *)PGROUNDUP((uint32_t)vstart);
+    for (; p + PGSIZE <= (uint8_t *)vend; p += PGSIZE) {
+        kfree(p);
+    }
+}
+
+uint8_t *kalloc(void) {
+    struct page_t *p;
+
+    p = kmem.freelist;
+    if (p)
+        kmem.freelist = p->next;
+    return (uint8_t *)p;
+}
+
+static struct kmap {
+    void *va;
+    uint32_t pa_start;
+    uint32_t pa_end;
+    int perm;
+} kmap[] = {
+    { (void *)KERNBASE, 0,             EXTMEM,    PTE_W}, // I/O space
+    { (void *)KERNLINK, V2P(KERNLINK), V2P(data), 0},     // kern text+rodata
+    { (void *)data,     V2P(data),     PHYSTOP,   PTE_W}, // kern data+memory
+    { (void *)DEVSPACE, DEVSPACE,      0,         PTE_W}, // more devices
+};
+
+pde_t* setupkvm(void) {
+    pde_t *pgdir = 0;
+    pgdir = (pde_t *)kalloc();
+    if(pgdir) {
+        memset(pgdir, 0, PGSIZE);
+        if (P2V(PHYSTOP) > (void*)DEVSPACE) {
+            panic("PHYSTOP too high");
+        }
+        for(struct kmap *m = kmap; m < &kmap[NELEM(kmap)]; m++) {
+            map_pages(pgdir,
+                m->va,
+                m->pa_end - m->pa_start,
+                (uint32_t)m->pa_start,
+                m->perm
+            );
+        }
+        return pgdir;
+    }
+    return 0;
+}
+
+int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm) {
+    uint8_t *a, *last;
+    pte_t *pte;
+
+    a = (uint8_t *)PGROUNDDOWN((uint32_t)va);
+    last = (uint8_t *)PGROUNDDOWN(((uint32_t)va) + size - 1);
+    while (1) {
+        if((pte = walkpgdir(pgdir, a, 1)) == 0)
+            return -1;
+        if(*pte & PTE_P)
+            panic("remap");
+        *pte = pa | perm | PTE_P;
+        if(a == last)
+            break;
+        a += PGSIZE;
+        pa += PGSIZE;
+    }
+    
+    return 0;
+}
+
+pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc) {
+    pde_t *pde;
+    pte_t *pgtab;
+
+    pde = &pgdir[PDX(va)];
+    if(*pde & PTE_P) {
+        pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+    } else {
+        if(!alloc || (pgtab = (pte_t*)kalloc()) == 0) {
+            return 0;
+        }
+            
+        // Make sure all those PTE_P bits are zero.
+        memset(pgtab, 0, PGSIZE);
+        // The permissions here are overly generous, but they can
+        // be further restricted by the permissions in the page table
+        // entries, if necessary.
+        *pde = V2P(pgtab) | PTE_P | PTE_W | PTE_U;
+    }
+  return &pgtab[PTX(va)];
+}
+
+void switchkvm(void)
+{
+    lcr3(V2P(kpgdir));   // switch to the kernel page table
+}
 
 void memory_init(void) {
-    struct e820_table *base = (struct e820_table *)0x8000;
-    vga_console_printf("Memory Layout\n\n");
-    vga_console_printf("total %d\n\n", base->nr_entries);
-    vga_console_printf("address    length     type\n\n");
-    for (int i = 0; i < base->nr_entries; i++) {
-        vga_console_printf("0x%08x 0x%08x %s\n", base->entries[i].base_addr_low, base->entries[i].length_low, (base->entries[i].type == 1) ? "RAM" : "RESERVED");
+    free_range(end, P2V(4 * 1024 * 1024));
+    kpgdir = setupkvm();
+    switchkvm();
+    seginit();
+    get_memory_layout();
+    
+}
+
+void get_memory_layout(void) {
+    
+    struct e820_table *base = (struct e820_table *)0xc0008000;
+    if (base->nr_entries == 0) {
+        panic("e820 failed");
+    };
+    for (size_t i = 0; i < base->nr_entries; base++) {
+        if (base->entries[i].type == 1 && base->entries[i].length_low > 0x1000000) {
+            mem_start = (uint8_t *)(base->entries[i].base_addr_low);
+            mem_length = base->entries[i].length_low;
+            mem_end = (uint8_t *)(base->entries[i].base_addr_low + base->entries[i].length_low);
+            return;
+        }
     }
-    vga_console_printf("\nSize of usable memory above 1MB: %dMB", base->entries[3].length_low / 0x100000);
 }

@@ -17,4 +17,7 @@ typedef int32_t intptr_t;
 typedef uint32_t uintptr_t;
 typedef uint32_t physaddr_t;
 
+typedef uint32_t pde_t;     // Page Directory Entry
+typedef uint32_t pte_t;     // Page Table Entry
+
 #endif // TYPES_H

@@ -59,5 +59,5 @@ void video_init(void) {
             write_pixel(x, y, bgr(255, 255, 255));
         }
     }
-    vga_console_printf("Video buffer base: %x\n", modeInfo->dwPhysicalBasePointer);
+    //vga_console_printf("Video buffer base: %x\n", modeInfo->dwPhysicalBasePointer);
 }

@@ -15,6 +15,8 @@ void vga_console_draw_ascii(int row, int column, char c) {
 }
 
 void vga_console_init() {
+    x = 0;
+    y = 0;
     for (int i = 0; i < CONSOLE_HEIGHT; i++) {
         for (int j = 0; j < CONSOLE_WIDTH; j++) {
             vga_console_draw_ascii(i, j, ' ');

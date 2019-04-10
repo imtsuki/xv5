@@ -7,11 +7,13 @@ entry:
 	.code16
 	# Disable interrupts
 	cli
+	cld
 	# Initialize registers
 	mov $0, %ax
 	mov %ax, %ss
 	mov %ax, %ds
 	mov %ax, %es
+	
 video:
 	mov $0x9000, %di
 	mov $0x115, %cx
@@ -54,11 +56,15 @@ seta20.2:
 	outb	%al, $0x60
 	# Switch to protect mode
 	lgdt	gdtdesc					# load GDT
+
 	movl	%cr0, %eax
 	orl		$0x1, %eax
 	movl	%eax, %cr0
+
+
 	# jump to 32-bit instruction
 	# 清空流水线
+
 	ljmp	$PROTECTED_MODE_CS, $protcseg
 	.code32
 protcseg:

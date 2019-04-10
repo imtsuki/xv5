@@ -56,7 +56,7 @@ boot: $(BOOT_OBJS)
 
 KERN_LDFLAGS := $(LDFLAGS) -T kernel.ld -nostdlib
 KERN_SRCFILES := entry.c
-KERN_OBJFILES := scheduler.o timer.o memory.o console.o kbd.o vectors.o trapasm.o printfmt.o trap.o video.o string.o entry.o init.o hankaku.o
+KERN_OBJFILES := panic.o scheduler.o timer.o memory.o console.o kbd.o vectors.o trapasm.o printfmt.o trap.o video.o string.o entry.o init.o hankaku.o
 
 %.o: %.S
 	@echo + as $<
@@ -81,7 +81,7 @@ kernel.img: boot kernel
 QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio -m 2G
 IMAGES = kernel.img
 
-qemu:
+qemu: all
 	$(QEMU) $(QEMUOPTS)
 
 clean:

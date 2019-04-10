@@ -47,12 +47,23 @@ int vga_console_printf(char *fmt, ...);
 
 // memory.c
 void memory_init(void);
-
+void get_memory_layout();
+void kfree(uint8_t *v);
+uint8_t *kalloc(void);
+void free_range(void *vstart, void *vend);
+void freevm(pde_t *pgdir);
+int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm);
+pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
 //timer.c
 void timer_init(void);
 void timerintr(void);
 
 // scheduler.c
 void run_scheduler(void);
+
+//panic.c
+void panic(char *msg);
+
+#define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
 #endif
