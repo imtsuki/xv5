@@ -47,13 +47,19 @@ int vga_console_printf(char *fmt, ...);
 
 // memory.c
 void memory_init(void);
-void get_memory_layout();
+void get_memory_layout(void);
+pde_t* setupkvm(void);
+int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm);
+pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
+void switchkvm(void);
+void free_range(void *vstart, void *vend);
 void kfree(uint8_t *v);
 uint8_t *kalloc(void);
-void free_range(void *vstart, void *vend);
 void freevm(pde_t *pgdir);
 int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm);
 pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
+void seg_init(void);
+
 //timer.c
 void timer_init(void);
 void timerintr(void);

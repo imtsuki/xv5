@@ -6,6 +6,12 @@
 
 pde_t *kpgdir;
 
+uint8_t *mem_start, *mem_end;
+size_t mem_length;
+extern uint8_t data[], end[];
+
+struct segdesc gdt[NSEGS];
+
 struct page_t {
     struct page_t *next;
 };
@@ -14,15 +20,34 @@ struct {
   struct page_t *freelist;
 } kmem;
 
-uint8_t *mem_start, *mem_end;
-size_t mem_length;
-extern uint8_t data[], end[];
+void memory_init(void) {
+    vga_console_printf("Initializing memory...\n");
+    get_memory_layout();
+    free_range(end, P2V(4 * 1024 * 1024));
+    kpgdir = setupkvm();
+    switchkvm();
+    seg_init();
+    free_range(P2V(4 * 1024 * 1024), P2V(mem_end));
+    vga_console_printf("%d bytes available.\n", mem_length);
+}
 
-struct segdesc gdt[NSEGS];
+void get_memory_layout(void) {
+    struct e820_table *base = (struct e820_table *)P2V(0x8000);
+    if (base->nr_entries == 0) {
+        panic("e820 failed");
+    };
+    for (size_t i = 0; i < base->nr_entries; i++) {
+        if (base->entries[i].type == 1 && base->entries[i].length_low > 0x1000000) {
+            mem_start = (uint8_t *)(base->entries[i].base_addr_low);
+            mem_length = base->entries[i].length_low;
+            mem_end = (uint8_t *)(base->entries[i].base_addr_low + base->entries[i].length_low);
+            
+            return;
+        }
+    }
+}
 
-void
-seginit(void)
-{
+void seg_init(void) {
     gdt[SEG_KCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, 0);
     gdt[SEG_KDATA] = SEG(STA_W, 0, 0xffffffff, 0);
     gdt[SEG_UCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, DPL_USER);
@@ -33,7 +58,7 @@ seginit(void)
 void kfree(uint8_t *v) {
     struct page_t *p;
 
-    if((uint32_t)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
+    if((uint32_t)v % PGSIZE || v < end || V2P(v) >= (uint32_t)mem_end)
         panic("kfree");
 
     memset(v, 1, PGSIZE);
@@ -74,11 +99,12 @@ static struct kmap {
 
 pde_t* setupkvm(void) {
     pde_t *pgdir = 0;
+    kmap[2].pa_end = (uint32_t)mem_end;
     pgdir = (pde_t *)kalloc();
     if(pgdir) {
         memset(pgdir, 0, PGSIZE);
-        if (P2V(PHYSTOP) > (void*)DEVSPACE) {
-            panic("PHYSTOP too high");
+        if (P2V(mem_end) > (void*)DEVSPACE) {
+            panic("phy_mem_end too high");
         }
         for(struct kmap *m = kmap; m < &kmap[NELEM(kmap)]; m++) {
             map_pages(pgdir,
@@ -89,8 +115,9 @@ pde_t* setupkvm(void) {
             );
         }
         return pgdir;
+    } else {
+        return 0;
     }
-    return 0;
 }
 
 int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm) {
@@ -136,32 +163,7 @@ pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc) {
   return &pgtab[PTX(va)];
 }
 
-void switchkvm(void)
-{
-    lcr3(V2P(kpgdir));   // switch to the kernel page table
-}
-
-void memory_init(void) {
-    free_range(end, P2V(4 * 1024 * 1024));
-    kpgdir = setupkvm();
-    switchkvm();
-    seginit();
-    get_memory_layout();
-    
-}
-
-void get_memory_layout(void) {
-    
-    struct e820_table *base = (struct e820_table *)0xc0008000;
-    if (base->nr_entries == 0) {
-        panic("e820 failed");
-    };
-    for (size_t i = 0; i < base->nr_entries; base++) {
-        if (base->entries[i].type == 1 && base->entries[i].length_low > 0x1000000) {
-            mem_start = (uint8_t *)(base->entries[i].base_addr_low);
-            mem_length = base->entries[i].length_low;
-            mem_end = (uint8_t *)(base->entries[i].base_addr_low + base->entries[i].length_low);
-            return;
-        }
-    }
+// Switch to the kernel page table.
+void switchkvm(void) {
+    lcr3(V2P(kpgdir));
 }

@@ -78,7 +78,7 @@ kernel.img: boot kernel
 	$(V)dd if=kernel of=kernel.img~ seek=1 conv=notrunc 2>/dev/null
 	$(V)mv kernel.img~ kernel.img
 
-QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio -m 2G
+QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio -m 1G
 IMAGES = kernel.img
 
 qemu: all
