@@ -56,7 +56,16 @@ boot: $(BOOT_OBJS)
 
 KERN_LDFLAGS := $(LDFLAGS) -T kernel.ld -nostdlib
 KERN_SRCFILES := entry.c
-KERN_OBJFILES := panic.o scheduler.o timer.o memory.o console.o kbd.o vectors.o trapasm.o printfmt.o trap.o video.o string.o entry.o init.o hankaku.o
+KERN_OBJFILES := swtch.o syscall.o proc.o panic.o scheduler.o timer.o memory.o console.o kbd.o vectors.o trapasm.o printfmt.o trap.o video.o string.o entry.o init.o hankaku.o
+
+initcode: initcode.S
+	$(CC) $(CFLAGS) -nostdinc -I. -c initcode.S
+	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o initcode.out initcode.o
+	$(OBJCOPY) -S -O binary initcode.out initcode
+	$(OBJDUMP) -S initcode.o > initcode.asm
+
+hankaku.o: hankaku.bin
+	i386-elf-objcopy -I binary -O elf32-i386 -B i386 hankaku.bin hankaku.o
 
 %.o: %.S
 	@echo + as $<
@@ -67,9 +76,9 @@ KERN_OBJFILES := panic.o scheduler.o timer.o memory.o console.o kbd.o vectors.o 
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
 
-kernel: $(KERN_OBJFILES) kernel.ld
+kernel: $(KERN_OBJFILES) initcode kernel.ld
 	@echo + ld $@
-	$(V)$(LD) -o $@ $(KERN_LDFLAGS) $(KERN_OBJFILES) $(GCC_LIB)
+	$(V)$(LD) -o $@ $(KERN_LDFLAGS) $(KERN_OBJFILES) $(GCC_LIB) -b binary initcode
 
 kernel.img: boot kernel
 	@echo + mk $@
@@ -78,13 +87,31 @@ kernel.img: boot kernel
 	$(V)dd if=kernel of=kernel.img~ seek=1 conv=notrunc 2>/dev/null
 	$(V)mv kernel.img~ kernel.img
 
-QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio -m 1G
+QEMUOPTS = -drive file=kernel.img,index=0,media=disk,format=raw -serial mon:stdio -m 256M
 IMAGES = kernel.img
+
+GDBPORT = $(shell expr `id -u` % 5000 + 25001)
+
+QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
+	then echo "-gdb tcp::$(GDBPORT)"; \
+	else echo "-s -p $(GDBPORT)"; fi)
 
 qemu: all
 	$(QEMU) $(QEMUOPTS)
+
+.gdbinit: .gdbinit.tmpl
+	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
+
+qemu-gdb: all .gdbinit
+	@echo "*** Now run 'gdb'." 1>&2
+	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+
+gdb:
+	i386-elf-gdb -n -x .gdbinit
 
 clean:
 	rm *.img
 	rm *.out
 	rm *.asm
+	rm *.o
+	rm .gdbinit

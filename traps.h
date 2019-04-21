@@ -1,8 +1,6 @@
 #ifndef TRAPS_H
 #define TRAPS_H
 
-#include "include/types.h"
-
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
 #define PIC0_IMR		0x0021
@@ -16,7 +14,8 @@
 #define PIC1_ICW3		0x00a1
 #define PIC1_ICW4		0x00a1
 
-#define T_IRQ0          32      // IRQ 0 corresponds to int T_IRQ
+#define T_IRQ0          32
+#define T_SYSCALL       64
 
 #define IRQ_TIMER        0
 #define IRQ_KBD          1
@@ -26,6 +25,9 @@
 #define IRQ_ERROR       19
 #define IRQ_SPURIOUS    31
 
+#ifndef __ASSEMBLER__
+
+#include "include/types.h"
 
 struct trapframe {
   // registers as pushed by pusha
@@ -61,6 +63,6 @@ struct trapframe {
   uint16_t ss;
   uint16_t padding6;
 };
-
+#endif
 
 #endif

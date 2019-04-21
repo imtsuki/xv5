@@ -3,6 +3,8 @@
 #include "include/types.h"
 #include "include/string.h"
 #include "include/x86.h"
+#include "cpu.h"
+#include "proc.h"
 
 pde_t *kpgdir;
 
@@ -10,7 +12,7 @@ uint8_t *mem_start, *mem_end;
 size_t mem_length;
 extern uint8_t data[], end[];
 
-struct segdesc gdt[NSEGS];
+extern struct cpu_t cpu;
 
 struct page_t {
     struct page_t *next;
@@ -21,12 +23,13 @@ struct {
 } kmem;
 
 void memory_init(void) {
+    cpu.proc = 0;
+    seg_init();
     vga_console_printf("Initializing memory...\n");
     get_memory_layout();
     free_range(end, P2V(4 * 1024 * 1024));
     kpgdir = setupkvm();
     switchkvm();
-    seg_init();
     free_range(P2V(4 * 1024 * 1024), P2V(mem_end));
     vga_console_printf("%d bytes available.\n", mem_length);
 }
@@ -41,18 +44,17 @@ void get_memory_layout(void) {
             mem_start = (uint8_t *)(base->entries[i].base_addr_low);
             mem_length = base->entries[i].length_low;
             mem_end = (uint8_t *)(base->entries[i].base_addr_low + base->entries[i].length_low);
-            
             return;
         }
     }
 }
 
 void seg_init(void) {
-    gdt[SEG_KCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, 0);
-    gdt[SEG_KDATA] = SEG(STA_W, 0, 0xffffffff, 0);
-    gdt[SEG_UCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, DPL_USER);
-    gdt[SEG_UDATA] = SEG(STA_W, 0, 0xffffffff, DPL_USER);
-    lgdt(gdt, sizeof(gdt));
+    cpu.gdt[SEG_KCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, 0);
+    cpu.gdt[SEG_KDATA] = SEG(STA_W, 0, 0xffffffff, 0);
+    cpu.gdt[SEG_UCODE] = SEG(STA_X|STA_R, 0, 0xffffffff, DPL_USER);
+    cpu.gdt[SEG_UDATA] = SEG(STA_W, 0, 0xffffffff, DPL_USER);
+    lgdt(cpu.gdt, sizeof(cpu.gdt));
 }
 
 void kfree(uint8_t *v) {
@@ -107,6 +109,7 @@ pde_t* setupkvm(void) {
             panic("phy_mem_end too high");
         }
         for(struct kmap *m = kmap; m < &kmap[NELEM(kmap)]; m++) {
+
             map_pages(pgdir,
                 m->va,
                 m->pa_end - m->pa_start,
@@ -166,4 +169,68 @@ pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc) {
 // Switch to the kernel page table.
 void switchkvm(void) {
     lcr3(V2P(kpgdir));
+}
+
+void
+inituvm(pde_t *pgdir, char *init, size_t sz) {
+  uint8_t *mem;
+
+  if(sz >= PGSIZE)
+    panic("inituvm: more than a page");
+  mem = kalloc();
+  memset(mem, 0, PGSIZE);
+  map_pages(pgdir, 0, PGSIZE, V2P(mem), PTE_W|PTE_U);
+  memmove(mem, init, sz);
+}
+
+void switchuvm(struct proc_t *p) {
+  if(p == 0)
+    panic("switchuvm: no process");
+  if(p->kstack == 0)
+    panic("switchuvm: no kstack");
+  if(p->pgdir == 0)
+    panic("switchuvm: no pgdir");
+  cli();
+  memset(&(cpu.tss), 0, sizeof(cpu.tss));
+  cpu.gdt[SEG_TSS] = SEG16(STS_T32A, &(cpu.tss),
+                                sizeof(cpu.tss)-1, 0);
+  cpu.gdt[SEG_TSS].s = 0;
+  cpu.tss.ts_ss0 = SEG_KDATA << 3;
+  cpu.tss.ts_esp0 = (uint32_t)p->kstack + KSTACKSIZE;
+  // setting IOPL=0 in eflags *and* iomb beyond the tss segment limit
+  // forbids I/O instructions (e.g., inb and outb) from user space
+  cpu.tss.ts_iomb = (uint16_t) 0xFFFF;
+  ltr(SEG_TSS << 3);
+  lcr3(V2P(p->pgdir));  // switch to process's address space
+  sti();
+}
+
+pde_t* copyuvm(pde_t *pgdir, uint32_t sz) {
+  pde_t *d;
+  pte_t *pte;
+  uint32_t pa, i, flags;
+  uint8_t *mem;
+
+  if((d = setupkvm()) == 0)
+    return 0;
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    if(!(*pte & PTE_P))
+      panic("copyuvm: page not present");
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    if((mem = kalloc()) == 0)
+      goto bad;
+    memmove(mem, (char*)P2V(pa), PGSIZE);
+    if(map_pages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+      kfree(mem);
+      goto bad;
+    }
+  }
+  return d;
+
+bad:
+  //freevm(d);
+  return 0;
 }

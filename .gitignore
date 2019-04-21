@@ -2,8 +2,9 @@
 *.asm
 .DS_Store
 *.img
-*.bin
 *.out
+.gdbinit
 .vscode/
 kernel
 boot
+initcode

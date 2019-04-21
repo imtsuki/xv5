@@ -1,3 +1,4 @@
+#include "include/mmu.h"
 .text
 
 .global trap_entry
@@ -7,6 +8,9 @@ trap_entry:
     pushl %fs
     pushl %gs
     pushal
+    movw $(SEG_KDATA<<3), %ax
+    movw %ax, %ds
+    movw %ax, %es
     pushl %esp
     call trap
     addl $4, %esp

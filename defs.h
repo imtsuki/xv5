@@ -2,6 +2,9 @@
 #define DEFS_H
 
 #include "include/types.h"
+#include "proc.h"
+#include "cpu.h"
+
 
 //entry.c
 void init(void);
@@ -59,6 +62,10 @@ void freevm(pde_t *pgdir);
 int map_pages(pde_t *pgdir, void *va, size_t size, uint32_t pa, int perm);
 pte_t *walkpgdir(pde_t *pgdir, const void *va, int alloc);
 void seg_init(void);
+void inituvm(pde_t *pgdir, char *init, size_t sz);
+void switchuvm(struct proc_t *p);
+pde_t* copyuvm(pde_t *pgdir, uint32_t sz) ;
+int fork(void);
 
 //timer.c
 void timer_init(void);
@@ -69,6 +76,14 @@ void run_scheduler(void);
 
 //panic.c
 void panic(char *msg);
+
+// proc.c
+void user_init(void);
+void yield(void);
+
+void swtch(struct context_t **, struct context_t *);
+
+void syscall(void);
 
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 

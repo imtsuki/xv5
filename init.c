@@ -6,16 +6,21 @@
 #include "traps.h"
 #include "include/mmu.h"
 
+extern struct cpu_t cpu;
+
 void init(void) {
     video_init();
     vga_console_init();
     memory_init();
     idt_init();
     pic_init();
+
     kbd_init();
+
     timer_init();
-    
-    
+
+    user_init();
+
     vga_console_printf("\nWelcome to BuggySys.\n\n>");
     run_scheduler();
 }
